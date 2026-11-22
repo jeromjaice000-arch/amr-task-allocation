@@ -1,3 +1,4 @@
+import AlgorithmComparison from "./components/AlgorithmComparison";
 import AllocationTimeline from "./components/AllocationTimeline";
 import { useState } from "react";
 
@@ -36,30 +37,48 @@ export default function App() {
   const [algorithm, setAlgorithm] = useState("nearest");
 
   const [result, setResult] = useState(null);
+  const [comparison, setComparison] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const robots = initialRobots.slice(0, robotCount);
 
-  async function handleRun() {
-    setLoading(true);
-    setError("");
-    setResult(null);
 
-    try {
-      const tasks = generateTasks(taskCount);
-      const data = await runSimulation(
-        robots,
-        tasks,
-        algorithm
-      );
-      setResult(data);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
+async function handleRun() {
+  setLoading(true);
+  setError("");
+  setResult(null);
+  setComparison(null);
+
+  try {
+    const tasks = generateTasks(taskCount);
+
+    // Run both policies on the same scenario.
+    const [nearestResult, optimizedResult] =
+      await Promise.all([
+        runSimulation(robots, tasks, "nearest"),
+        runSimulation(robots, tasks, "optimized")
+      ]);
+
+    setComparison({
+      nearest: nearestResult,
+      optimized: optimizedResult
+    });
+
+    // Show the selected algorithm in the timeline
+    // and task assignments table.
+    setResult(
+      algorithm === "optimized"
+        ? optimizedResult
+        : nearestResult
+    );
+  } catch (err) {
+    setError(err.message);
+  } finally {
+    setLoading(false);
   }
+}
+
 
   return (
     <div className="min-h-screen bg-slate-950 text-white flex">
@@ -128,11 +147,16 @@ export default function App() {
         )}
     <div className="mt-6">
   <AllocationTimeline
-    assignments={result?.assignments || []}
-    robots={robots}
-    makespan={result?.metrics?.makespan || 0}
-  />
+  assignments={result?.assignments || []}
+  robots={robots}
+  makespan={result?.metrics?.makespan || 0}
+/>
 </div>
+
+<div className="mt-6">
+  <AlgorithmComparison comparison={comparison} />
+</div>
+
   
         {result && (
           <section className="mt-6 bg-slate-900 border border-slate-800 rounded-xl p-6">
