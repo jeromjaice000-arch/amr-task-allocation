@@ -1,4 +1,6 @@
-
+from fastapi import HTTPException
+from models import SimulationRequest
+from simulation import run_simulation
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -34,3 +36,17 @@ def health_check():
         "status": "healthy",
         "service": "AMR Simulation Backend"
     }
+
+
+@app.post("/api/simulate")
+def simulate(
+    request: SimulationRequest,
+    algorithm: str = "nearest"
+):
+    try:
+        return run_simulation(request, algorithm)
+    except ValueError as error:
+        raise HTTPException(
+            status_code=400,
+            detail=str(error)
+        ) from error
