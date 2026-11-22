@@ -5,7 +5,9 @@ export default function SimulationControls({
   taskCount,
   setTaskCount,
   algorithm,
-  setAlgorithm
+  setAlgorithm,
+  onRun,
+  loading
 }) {
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
@@ -51,20 +53,25 @@ export default function SimulationControls({
           <select
             value={algorithm}
             onChange={(e) => setAlgorithm(e.target.value)}
-            className="w-full bg-slate-800 border border-slate-700
-              rounded-lg p-3 text-sm"
+            className="w-full bg-slate-800 border border-slate-700 rounded-lg p-3"
           >
-            <option value="nearest">Nearest Available Robot</option>
-            <option value="optimized">Workload-Aware Allocation</option>
+            <option value="nearest">
+              Nearest Available Robot
+            </option>
+            <option value="optimized">
+              Workload-Aware Allocation
+            </option>
           </select>
         </div>
 
         <button
-          disabled
-          className="w-full bg-cyan-600 text-white rounded-lg py-3
-            font-semibold opacity-60 cursor-not-allowed"
+          onClick={onRun}
+          disabled={loading}
+          className="w-full bg-cyan-600 hover:bg-cyan-500
+            disabled:opacity-50 text-white rounded-lg
+            py-3 font-semibold transition-colors"
         >
-          Run Simulation — Coming Soon
+          {loading ? "Running..." : "Run Simulation"}
         </button>
       </div>
     </div>
