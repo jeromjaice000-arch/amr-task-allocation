@@ -7,6 +7,14 @@ export const initialRobots = [
   { id: 5, name: "AMR-05", x: 10, y: 1, speed: 2.5, capacity: 25, status: "Idle" },
 ];
 
+export const robotColors = [
+  { bg: "bg-cyan-500", text: "text-cyan-400", border: "border-cyan-400", hex: "#06b6d4" },
+  { bg: "bg-violet-500", text: "text-violet-400", border: "border-violet-400", hex: "#8b5cf6" },
+  { bg: "bg-emerald-500", text: "text-emerald-400", border: "border-emerald-400", hex: "#10b981" },
+  { bg: "bg-amber-500", text: "text-amber-400", border: "border-amber-400", hex: "#f59e0b" },
+  { bg: "bg-pink-500", text: "text-pink-400", border: "border-pink-400", hex: "#ec4899" }
+];
+
 export const warehouse = {
   width: 12,
   height: 8,

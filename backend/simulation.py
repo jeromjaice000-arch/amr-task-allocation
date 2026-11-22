@@ -1,5 +1,6 @@
 from algorithms.optimized import workload_aware
 from algorithms.nearest import nearest_available
+from traffic import detect_collisions
 
 
 def calculate_metrics(assignments, robots, tasks):
@@ -7,7 +8,10 @@ def calculate_metrics(assignments, robots, tasks):
         return {
             "makespan": 0,
             "utilization_spread": 0,
-            "tasks_per_hour": 0
+            "tasks_per_hour": 0,
+            "total_waiting_time": 0,
+            "traffic_conflicts": 0,
+            "robot_utilizations": []
         }
 
     start_time = min(
@@ -34,10 +38,19 @@ def calculate_metrics(assignments, robots, tasks):
         if makespan > 0 else 0
     )
 
+    total_waiting_time = sum(
+        assignment.get("total_waiting_time", 0.0)
+        for assignment in assignments
+    )
+
+    collisions = detect_collisions(assignments)
+
     return {
         "makespan": round(makespan, 3),
         "utilization_spread": round(spread, 2),
         "tasks_per_hour": round(throughput, 2),
+        "total_waiting_time": round(total_waiting_time, 2),
+        "traffic_conflicts": len(collisions),
         "robot_utilizations": [
             {
                 "robot_id": robot.id,

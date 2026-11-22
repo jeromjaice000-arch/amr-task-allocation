@@ -19,6 +19,12 @@ const metrics = [
     label: "Tasks Completed / Hour",
     unit: "",
     lowerBetter: false
+  },
+  {
+    key: "total_waiting_time",
+    label: "Traffic Delay",
+    unit: "s",
+    lowerBetter: true
   }
 ];
 
@@ -56,7 +62,7 @@ export default function AlgorithmComparison({ comparison }) {
         Both policies evaluated using identical robots and tasks.
       </p>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {metrics.map((metric) => {
           const baseline = nearest[metric.key];
           const proposed = optimized[metric.key];

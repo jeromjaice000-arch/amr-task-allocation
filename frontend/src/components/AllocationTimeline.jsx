@@ -1,6 +1,7 @@
 
 import { useState } from "react";
-import { Clock3, ChartGantt } from "lucide-react";
+import { Clock3, ChartGantt, CheckCircle2 } from "lucide-react";
+import { robotColors } from "../data/mockData";
 
 export default function AllocationTimeline({
   assignments = [],
@@ -19,14 +20,6 @@ export default function AllocationTimeline({
     { length: 6 },
     (_, i) => (endTime * i) / 5
   );
-
-  const colors = [
-    "bg-cyan-500",
-    "bg-violet-500",
-    "bg-emerald-500",
-    "bg-amber-500",
-    "bg-pink-500"
-  ];
 
   if (!assignments.length) {
     return (
@@ -73,8 +66,11 @@ export default function AllocationTimeline({
                 key={robot.id}
                 className="flex items-center gap-4 mb-4"
               >
-                <div className="w-20 shrink-0 text-sm text-slate-300">
-                  {robot.name}
+                <div className="w-24 shrink-0 flex items-center gap-2 text-sm text-slate-300">
+                  <span
+                    className={`w-3 h-3 rounded-full ${robotColors[(robot.id - 1) % robotColors.length].bg}`}
+                  />
+                  <span>{robot.name}</span>
                 </div>
 
                 <div className="relative flex-1 h-11 rounded-lg bg-slate-800 overflow-hidden">
@@ -102,11 +98,11 @@ export default function AllocationTimeline({
                         title={`Task ${task.task_id}: ${task.start}s - ${task.finish}s`}
                         onClick={() => setSelectedTask(task)}
                         className={`absolute top-1 bottom-1 rounded-md
-                          ${colors[index % colors.length]}
-                          text-white text-xs font-semibold
+                          ${robotColors[(robot.id - 1) % robotColors.length].bg}
+                          text-slate-950 text-xs font-bold
                           hover:brightness-125 transition-all
                           flex items-center justify-center
-                          overflow-hidden`}
+                          overflow-hidden shadow-sm`}
                         style={{
                           left: `${left}%`,
                           width: `${width}%`
@@ -148,7 +144,7 @@ export default function AllocationTimeline({
             </button>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 text-sm">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mt-4 text-sm">
             <div>
               <p className="text-slate-400">Assigned Robot</p>
               <p>AMR-{String(selectedTask.robot_id).padStart(2, "0")}</p>
@@ -167,6 +163,13 @@ export default function AllocationTimeline({
             <div>
               <p className="text-slate-400">Duration</p>
               <p>{selectedTask.duration}s</p>
+            </div>
+
+            <div>
+              <p className="text-slate-400">Traffic Delay</p>
+              <p className={selectedTask.total_waiting_time > 0 ? "text-amber-400 font-semibold" : ""}>
+                {selectedTask.total_waiting_time ?? 0}s
+              </p>
             </div>
           </div>
         </div>
