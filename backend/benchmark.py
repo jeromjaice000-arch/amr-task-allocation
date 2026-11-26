@@ -90,21 +90,33 @@ def run_benchmark():
 
         req = SimulationRequest(robots=fleet, tasks=tasks)
 
-        # Baseline: Nearest
-        t0 = time.time()
-        res_near = run_simulation(req, "nearest")
-        t_near = time.time() - t0
+        # Standard (Wait-based)
+        res_near = run_simulation(req, "nearest", traffic_strategy="standard")
         m_near = res_near["metrics"]
 
-        # Proposed: Workload-Aware
-        t0 = time.time()
-        res_opt = run_simulation(req, "optimized")
-        t_opt = time.time() - t0
+        res_opt = run_simulation(req, "optimized", traffic_strategy="standard")
         m_opt = res_opt["metrics"]
+
+        # Adaptive (ATAPP)
+        res_near_atapp = run_simulation(req, "nearest", traffic_strategy="adaptive")
+        m_near_atapp = res_near_atapp["metrics"]
+
+        res_opt_atapp = run_simulation(req, "optimized", traffic_strategy="adaptive")
+        m_opt_atapp = res_opt_atapp["metrics"]
 
         makespan_imp = (
             ((m_near["makespan"] - m_opt["makespan"]) / m_near["makespan"]) * 100
             if m_near["makespan"] > 0
+            else 0.0
+        )
+        atapp_near_imp = (
+            ((m_near["makespan"] - m_near_atapp["makespan"]) / m_near["makespan"]) * 100
+            if m_near["makespan"] > 0
+            else 0.0
+        )
+        atapp_opt_imp = (
+            ((m_opt["makespan"] - m_opt_atapp["makespan"]) / m_opt["makespan"]) * 100
+            if m_opt["makespan"] > 0
             else 0.0
         )
         spread_diff = m_near["utilization_spread"] - m_opt["utilization_spread"]
@@ -115,15 +127,21 @@ def run_benchmark():
             "tasks": len(tasks),
             "nearest": m_near,
             "optimized": m_opt,
+            "nearest_atapp": m_near_atapp,
+            "optimized_atapp": m_opt_atapp,
             "makespan_imp": round(makespan_imp, 2),
+            "atapp_near_imp": round(atapp_near_imp, 2),
+            "atapp_opt_imp": round(atapp_opt_imp, 2),
             "spread_diff": round(spread_diff, 2),
             "delay_diff": round(delay_diff, 2),
         })
 
         print(f"\n### {name}")
-        print(f"- **Nearest-Available**: Makespan = {m_near['makespan']}s | Spread = {m_near['utilization_spread']}% | TPH = {m_near['tasks_per_hour']} | Delay = {m_near['total_waiting_time']}s | Conflicts = {m_near['traffic_conflicts']}")
-        print(f"- **Workload-Aware**  : Makespan = {m_opt['makespan']}s | Spread = {m_opt['utilization_spread']}% | TPH = {m_opt['tasks_per_hour']} | Delay = {m_opt['total_waiting_time']}s | Conflicts = {m_opt['traffic_conflicts']}")
-        print(f"- **Impact**: Makespan {makespan_imp:+.2f}% | Spread Reduction: {spread_diff:+.2f}% | Delay Saved: {delay_diff:+.2f}s")
+        print(f"- **Nearest (Standard)** : Makespan = {m_near['makespan']}s | Spread = {m_near['utilization_spread']}% | TPH = {m_near['tasks_per_hour']} | Delay = {m_near['total_waiting_time']}s | Conflicts = {m_near['traffic_conflicts']}")
+        print(f"- **Nearest (ATAPP)**    : Makespan = {m_near_atapp['makespan']}s | Spread = {m_near_atapp['utilization_spread']}% | TPH = {m_near_atapp['tasks_per_hour']} | Delay = {m_near_atapp['total_waiting_time']}s | Reroutes = {m_near_atapp['reroute_count']} | Conflicts = {m_near_atapp['traffic_conflicts']}")
+        print(f"- **Workload (Standard)**: Makespan = {m_opt['makespan']}s | Spread = {m_opt['utilization_spread']}% | TPH = {m_opt['tasks_per_hour']} | Delay = {m_opt['total_waiting_time']}s | Conflicts = {m_opt['traffic_conflicts']}")
+        print(f"- **Workload (ATAPP)**   : Makespan = {m_opt_atapp['makespan']}s | Spread = {m_opt_atapp['utilization_spread']}% | TPH = {m_opt_atapp['tasks_per_hour']} | Delay = {m_opt_atapp['total_waiting_time']}s | Reroutes = {m_opt_atapp['reroute_count']} | Conflicts = {m_opt_atapp['traffic_conflicts']}")
+        print(f"- **ATAPP Impact**: Nearest {atapp_near_imp:+.2f}% | Workload-Aware {atapp_opt_imp:+.2f}%")
 
     return results
 

@@ -19,10 +19,13 @@ const ROWS = warehouse.height;
  */
 function getRobotStateAtTime(robot, robotTasks, time) {
   let position = { x: robot.x, y: robot.y };
-  let status = "Idle";
+  let status = "IDLE";
+  let stateCategory = "idle"; // idle | moving | waiting | rerouting | overtaking | completed
   let activeTask = null;
   let isDelayed = false;
   let isDelivering = false;
+  let isRerouting = false;
+  let isOvertaking = false;
   let activePath = [];
 
   for (let tIdx = 0; tIdx < robotTasks.length; tIdx++) {
@@ -31,31 +34,43 @@ function getRobotStateAtTime(robot, robotTasks, time) {
 
     if (!path.length) continue;
 
-    // Has not reached this task yet
     if (time < task.start) {
       break;
     }
 
-    // Past this task - update position to task delivery end
     if (time >= task.finish) {
       const last = path[path.length - 1];
       position = { x: last.x, y: last.y };
-      status = tIdx === robotTasks.length - 1 ? "Completed" : "Idle";
+      if (tIdx === robotTasks.length - 1) {
+        status = "COMPLETED";
+        stateCategory = "completed";
+      } else {
+        status = "IDLE";
+        stateCategory = "idle";
+      }
       continue;
     }
 
-    // Currently within this task's assigned window [task.start, task.finish]
     activeTask = task;
     activePath = path;
 
-    // Traffic delay check: task requested start was earlier than actual departure
     if (time < path[0].time) {
-      status = "Waiting (Traffic Delay)";
+      status = "WAITING";
+      stateCategory = "waiting";
       isDelayed = true;
-      return { position, status, activeTask, isDelayed, isDelivering, activePath };
+      return {
+        position,
+        status,
+        stateCategory,
+        activeTask,
+        isDelayed,
+        isDelivering,
+        isRerouting,
+        isOvertaking,
+        activePath
+      };
     }
 
-    // Robot is moving along the timed waypoints
     for (let i = 0; i < path.length - 1; i++) {
       const a = path[i];
       const b = path[i + 1];
@@ -72,36 +87,95 @@ function getRobotStateAtTime(robot, robotTasks, time) {
           y: a.y + (b.y - a.y) * progress
         };
 
-        // Pickup point is (warehouse.pickup[0], warehouse.pickup[1])
-        // If current waypoint index has reached pickup point, robot is delivering
-        const reachedPickup = path.slice(0, i + 1).some(
-          (wp) => wp.x === warehouse.pickup[0] && wp.y === warehouse.pickup[1]
-        );
+        const isWaitingAtWaypoint = a.x === b.x && a.y === b.y && b.time > a.time;
 
-        if (reachedPickup) {
-          status = "Delivering";
-          isDelivering = true;
+        if (isWaitingAtWaypoint) {
+          status = "WAITING";
+          stateCategory = "waiting";
+          isDelayed = true;
         } else {
-          status = "Moving to Pickup";
+          const reachedPickup = path.slice(0, i + 1).some(
+            (wp) => wp.x === warehouse.pickup[0] && wp.y === warehouse.pickup[1]
+          );
+
+          isDelivering = reachedPickup;
+
+          const inOvertakeWindow =
+            task.overtaken &&
+            Array.isArray(task.overtake_windows) &&
+            task.overtake_windows.some(
+              (w) => time >= w.start_time && time <= w.end_time
+            );
+
+          if (inOvertakeWindow) {
+            status = "OVERTAKING";
+            stateCategory = "overtaking";
+            isOvertaking = true;
+            isRerouting = true;
+          } else if (task.rerouted && !task.overtaken) {
+            status = "REROUTING";
+            stateCategory = "rerouting";
+            isRerouting = true;
+          } else {
+            status = "MOVING";
+            stateCategory = "moving";
+          }
         }
 
-        return { position, status, activeTask, isDelayed, isDelivering, activePath };
+        return {
+          position,
+          status,
+          stateCategory,
+          activeTask,
+          isDelayed,
+          isDelivering,
+          isRerouting,
+          isOvertaking,
+          activePath
+        };
       }
     }
 
     const last = path[path.length - 1];
     position = { x: last.x, y: last.y };
-    status = tIdx === robotTasks.length - 1 ? "Completed" : "Idle";
-    return { position, status, activeTask, isDelayed, isDelivering, activePath };
+    if (tIdx === robotTasks.length - 1) {
+      status = "COMPLETED";
+      stateCategory = "completed";
+    } else {
+      status = "IDLE";
+      stateCategory = "idle";
+    }
+    return {
+      position,
+      status,
+      stateCategory,
+      activeTask,
+      isDelayed,
+      isDelivering,
+      isRerouting,
+      isOvertaking,
+      activePath
+    };
   }
 
-  return { position, status, activeTask, isDelayed, isDelivering, activePath };
+  return {
+    position,
+    status,
+    stateCategory,
+    activeTask,
+    isDelayed,
+    isDelivering,
+    isRerouting,
+    isOvertaking,
+    activePath
+  };
 }
 
 export default function AnimatedWarehouse({
   robots = [],
   assignments = [],
-  makespan = 0
+  makespan = 0,
+  onPlayingChange
 }) {
   const [time, setTime] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -113,7 +187,12 @@ export default function AnimatedWarehouse({
 
   const duration = Math.max(Number(makespan) || 0, 0);
 
-  // Group assignments per robot
+  useEffect(() => {
+    if (onPlayingChange) {
+      onPlayingChange(playing);
+    }
+  }, [playing, onPlayingChange]);
+
   const tasksByRobot = useMemo(() => {
     const grouped = new Map();
 
@@ -130,7 +209,6 @@ export default function AnimatedWarehouse({
     return grouped;
   }, [assignments]);
 
-  // Compute live positions and states for all robots at current simulation clock `time`
   const robotStates = useMemo(() => {
     return robots.map((robot) => {
       const robotTasks = tasksByRobot.get(robot.id) || [];
@@ -145,17 +223,25 @@ export default function AnimatedWarehouse({
     });
   }, [robots, tasksByRobot, time]);
 
-  // Count active moving robots
   const activeCount = robotStates.filter(
-    (r) => r.status === "Moving to Pickup" || r.status === "Delivering"
+    (r) =>
+      r.stateCategory === "moving" ||
+      r.stateCategory === "rerouting" ||
+      r.stateCategory === "overtaking"
+  ).length;
+
+  const overtakingCount = robotStates.filter(
+    (r) => r.stateCategory === "overtaking"
+  ).length;
+
+  const reroutingCount = robotStates.filter(
+    (r) => r.stateCategory === "rerouting"
   ).length;
 
   const delayedCount = robotStates.filter((r) => r.isDelayed).length;
 
-  // Selected robot details
   const selectedRobot = robotStates.find((r) => r.id === selectedRobotId);
 
-  // Animation frame loop
   useEffect(() => {
     if (!playing || duration <= 0) {
       lastFrameRef.current = null;
@@ -192,7 +278,6 @@ export default function AnimatedWarehouse({
     };
   }, [playing, speed, duration]);
 
-  // Reset when assignments change
   useEffect(() => {
     setPlaying(false);
     setTime(0);
@@ -217,21 +302,21 @@ export default function AnimatedWarehouse({
   }
 
   return (
-    <section className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+    <section className="glass-card rounded-xl p-6">
       {/* Header */}
       <div className="flex flex-wrap justify-between items-center gap-3 mb-5">
         <div>
-          <h2 className="text-xl font-semibold flex items-center gap-2">
-            <Bot className="text-cyan-400" size={22} />
+          <h2 className="text-xl font-semibold flex items-center gap-2 text-slate-900 dark:text-slate-100">
+            <Bot className="text-cyan-600 dark:text-cyan-400" size={22} />
             Live Warehouse Simulation
           </h2>
-          <p className="text-sm text-slate-400 mt-1">
-            Real-time A* trajectory playback with dynamic traffic scheduling
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+            Real-time A* trajectory playback with ATAPP traffic scheduling &amp; overtaking
           </p>
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-emerald-950/70 border border-emerald-700/60 text-emerald-400">
+          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-400">
             <ShieldCheck size={14} />
             <span>0 Moving Conflicts</span>
           </div>
@@ -239,8 +324,8 @@ export default function AnimatedWarehouse({
           <div
             className={`text-xs font-semibold px-3 py-1 rounded-full border ${
               playing
-                ? "bg-cyan-500/10 border-cyan-500/30 text-cyan-400"
-                : "bg-slate-800 border-slate-700 text-slate-400"
+                ? "bg-cyan-500/10 border-cyan-500/30 text-cyan-700 dark:text-cyan-400"
+                : "bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400"
             }`}
           >
             {playing ? "Simulation Running" : "Simulation Paused"}
@@ -250,7 +335,7 @@ export default function AnimatedWarehouse({
 
       {/* Warehouse Grid */}
       <div
-        className="relative w-full mb-4 overflow-hidden rounded-xl border border-slate-700 bg-slate-950 shadow-inner select-none"
+        className="relative w-full mb-4 overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-950 select-none"
         style={{
           aspectRatio: `${COLS} / ${ROWS}`
         }}
@@ -277,7 +362,6 @@ export default function AnimatedWarehouse({
             const isDelivery =
               warehouse.delivery[0] === x && warehouse.delivery[1] === y;
 
-            // Highlight trail if robot is selected
             const isSelectedTrail =
               selectedRobot?.activePath?.some(
                 (wp) => wp.x === x && wp.y === y
@@ -287,13 +371,19 @@ export default function AnimatedWarehouse({
               <div
                 key={index}
                 className={`
-                  border border-slate-800/60
+                  border border-slate-200/90 dark:border-slate-800/60
                   flex items-center justify-center
                   text-[10px] sm:text-xs font-semibold transition-colors
-                  ${isShelf ? "bg-amber-950/80 border-amber-900/50 text-amber-300" : ""}
-                  ${isPickup ? "bg-green-950/80 border-green-800/80 text-green-300" : ""}
-                  ${isDelivery ? "bg-blue-950/80 border-blue-800/80 text-blue-300" : ""}
-                  ${isSelectedTrail && !isShelf && !isPickup && !isDelivery ? "bg-cyan-950/40 border-cyan-800/40" : ""}
+                  ${isShelf ? "bg-amber-200/80 dark:bg-amber-950/80 border-amber-300 dark:border-amber-900/50 text-amber-900 dark:text-amber-300" : ""}
+                  ${isPickup ? "bg-emerald-100 dark:bg-green-950/80 border-emerald-300 dark:border-green-800/80 text-emerald-800 dark:text-green-300" : ""}
+                  ${isDelivery ? "bg-blue-100 dark:bg-blue-950/80 border-blue-300 dark:border-blue-800/80 text-blue-800 dark:text-blue-300" : ""}
+                  ${isSelectedTrail && !isShelf && !isPickup && !isDelivery
+                    ? selectedRobot?.isOvertaking
+                      ? "bg-teal-500/15 dark:bg-teal-950/50 border-teal-500/40"
+                      : selectedRobot?.isRerouting
+                        ? "bg-purple-500/15 dark:bg-purple-950/50 border-purple-500/40"
+                        : "bg-cyan-500/15 dark:bg-cyan-950/40 border-cyan-500/40"
+                    : ""}
                 `}
                 title={
                   isShelf
@@ -306,13 +396,21 @@ export default function AnimatedWarehouse({
                 }
               >
                 {isShelf ? (
-                  <span className="opacity-70">S</span>
+                  <span className="opacity-80">S</span>
                 ) : isPickup ? (
-                  <span className="font-bold text-green-400">P</span>
+                  <span className="font-bold text-emerald-700 dark:text-green-400">P</span>
                 ) : isDelivery ? (
-                  <span className="font-bold text-blue-400">D</span>
+                  <span className="font-bold text-blue-700 dark:text-blue-400">D</span>
                 ) : isSelectedTrail ? (
-                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400/50" />
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      selectedRobot?.isOvertaking
+                        ? "bg-teal-500"
+                        : selectedRobot?.isRerouting
+                          ? "bg-purple-500"
+                          : "bg-cyan-500"
+                    }`}
+                  />
                 ) : null}
               </div>
             );
@@ -346,24 +444,42 @@ export default function AnimatedWarehouse({
               )}
 
               {/* Status Badge Above Robot */}
-              {robot.isDelayed && (
-                <span className="absolute -top-4 text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-500 text-slate-950 shadow-md whitespace-nowrap">
-                  Wait
+              {robot.stateCategory === "waiting" && (
+                <span className="absolute -top-4 text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-500 text-slate-950 shadow-sm whitespace-nowrap">
+                  WAIT
                 </span>
               )}
 
-              {robot.isDelivering && (
-                <span className="absolute -top-4 text-[9px] font-bold px-1 rounded bg-blue-500 text-white shadow-md flex items-center gap-0.5">
-                  <Package size={9} />
+              {robot.stateCategory === "overtaking" && (
+                <span className="absolute -top-4 text-[9px] font-bold px-1.5 py-0.2 rounded bg-teal-500 text-white shadow-sm whitespace-nowrap">
+                  OVERTAKE T{robot.activeTask?.task_id}
+                </span>
+              )}
+
+              {robot.stateCategory === "rerouting" && (
+                <span className="absolute -top-4 text-[9px] font-bold px-1.5 py-0.2 rounded bg-purple-600 text-white shadow-sm whitespace-nowrap">
+                  REROUTE T{robot.activeTask?.task_id}
+                </span>
+              )}
+
+              {robot.stateCategory === "moving" && (
+                <span className="absolute -top-4 text-[9px] font-bold px-1 rounded bg-blue-600 text-white shadow-sm flex items-center gap-0.5 whitespace-nowrap">
+                  {robot.isDelivering && <Package size={9} />}
                   <span>T{robot.activeTask?.task_id}</span>
                 </span>
               )}
 
-              {/* Main Robot Node */}
+              {robot.stateCategory === "completed" && (
+                <span className="absolute -top-4 text-[9px] font-bold px-1 rounded bg-emerald-600 text-white shadow-sm whitespace-nowrap">
+                  DONE
+                </span>
+              )}
+
+              {/* Main Robot Node (preserves individual identification color) */}
               <div
-                className={`w-[68%] h-[68%] max-w-10 max-h-10 aspect-square rounded-full ${robot.color.bg} text-slate-950 font-bold flex items-center justify-center shadow-lg transition-all ${
+                className={`w-[68%] h-[68%] max-w-10 max-h-10 aspect-square rounded-full ${robot.color.bg} text-slate-950 font-bold flex items-center justify-center shadow-md border-2 border-white dark:border-slate-900 transition-all ${
                   isSelected
-                    ? "ring-4 ring-white scale-110 shadow-cyan-500/50"
+                    ? "ring-4 ring-slate-900 dark:ring-white scale-110"
                     : "hover:scale-105"
                 } text-xs sm:text-sm`}
               >
@@ -376,83 +492,148 @@ export default function AnimatedWarehouse({
 
       {/* Selected Robot Live Inspector */}
       {selectedRobot && (
-        <div className="mb-5 p-3 rounded-lg bg-slate-800/80 border border-slate-700 flex flex-wrap items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-2">
-            <span
-              className={`w-4 h-4 rounded-full ${selectedRobot.color.bg}`}
-            />
-            <span className="font-semibold text-white">
-              {selectedRobot.name} Inspector
-            </span>
-            <span className="text-slate-400">|</span>
-            <span className="text-slate-300">
-              Status:{" "}
-              <strong
-                className={
-                  selectedRobot.isDelayed
-                    ? "text-amber-400"
-                    : selectedRobot.isDelivering
-                      ? "text-blue-400"
-                      : "text-emerald-400"
-                }
+        <div className="mb-5 p-3.5 rounded-lg bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 space-y-2 text-xs">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <span
+                className={`w-4 h-4 rounded-full ${selectedRobot.color.bg}`}
+              />
+              <span className="font-semibold text-slate-900 dark:text-white">
+                {selectedRobot.name} Inspector
+              </span>
+              <span className="text-slate-400">|</span>
+              <span
+                className={`px-2 py-0.5 rounded-full font-bold text-[10px] border ${
+                  selectedRobot.stateCategory === "waiting"
+                    ? "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/40"
+                    : selectedRobot.stateCategory === "overtaking"
+                      ? "bg-teal-500/15 text-teal-700 dark:text-teal-300 border-teal-500/40"
+                      : selectedRobot.stateCategory === "rerouting"
+                        ? "bg-purple-500/15 text-purple-700 dark:text-purple-300 border-purple-500/40"
+                        : selectedRobot.stateCategory === "moving"
+                          ? "bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 border-cyan-500/40"
+                          : selectedRobot.stateCategory === "completed"
+                            ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/40"
+                            : "bg-slate-200 dark:bg-slate-700/50 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-600"
+                }`}
               >
                 {selectedRobot.status}
-              </strong>
-            </span>
+              </span>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-4 text-slate-600 dark:text-slate-400">
+              <span>
+                Coord: ({selectedRobot.position.x.toFixed(2)},{" "}
+                {selectedRobot.position.y.toFixed(2)})
+              </span>
+              <span>Speed: {selectedRobot.speed} m/s</span>
+              <span>Capacity: {selectedRobot.capacity} kg</span>
+              {selectedRobot.activeTask && (
+                <span>
+                  Task: <strong className="text-slate-900 dark:text-white">T{selectedRobot.activeTask.task_id}</strong>{" "}
+                  ({selectedRobot.isDelivering
+                    ? `Delivery (${warehouse.delivery[0]}, ${warehouse.delivery[1]})`
+                    : `Pickup (${warehouse.pickup[0]}, ${warehouse.pickup[1]})`})
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => setSelectedRobotId(null)}
+                className="text-cyan-700 dark:text-cyan-400 hover:underline cursor-pointer ml-2 font-medium"
+              >
+                Clear
+              </button>
+            </div>
           </div>
 
-          <div className="flex items-center gap-4 text-slate-400">
-            <span>
-              Coord: ({selectedRobot.position.x.toFixed(2)},{" "}
-              {selectedRobot.position.y.toFixed(2)})
-            </span>
-            <span>Speed: {selectedRobot.speed} m/s</span>
-            <span>Capacity: {selectedRobot.capacity} kg</span>
-            {selectedRobot.activeTask && (
+          {selectedRobot.activeTask?.decision_reason && (
+            <div className="pt-2 border-t border-slate-200 dark:border-slate-700/70 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-700 dark:text-slate-300">
               <span>
-                Active Task: <strong>T{selectedRobot.activeTask.task_id}</strong>
+                <strong className="text-slate-500 dark:text-slate-400">Routing Decision:</strong>{" "}
+                {selectedRobot.activeTask.decision_reason}
               </span>
-            )}
-            <button
-              onClick={() => setSelectedRobotId(null)}
-              className="text-cyan-400 hover:text-cyan-300 underline ml-2"
-            >
-              Clear
-            </button>
-          </div>
+              <div className="flex items-center gap-3 text-slate-600 dark:text-slate-400">
+                {selectedRobot.activeTask.conflicting_robots?.length > 0 && (
+                  <span>
+                    Conflicting:{" "}
+                    <strong className="text-amber-700 dark:text-amber-300">
+                      {selectedRobot.activeTask.conflicting_robots
+                        .map((id) => `AMR-${String(id).padStart(2, "0")}`)
+                        .join(", ")}
+                    </strong>
+                  </span>
+                )}
+                {selectedRobot.activeTask.estimated_wait_duration > 0 && (
+                  <span>
+                    Est. Wait:{" "}
+                    <strong className="text-amber-700 dark:text-amber-300">
+                      {selectedRobot.activeTask.estimated_wait_duration}s
+                    </strong>
+                  </span>
+                )}
+                {selectedRobot.activeTask.estimated_time_saved > 0 && (
+                  <span>
+                    Est. Saved:{" "}
+                    <strong className="text-teal-700 dark:text-teal-300">
+                      +{selectedRobot.activeTask.estimated_time_saved}s
+                    </strong>
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
       {/* Grid Legend & Status Summary */}
-      <div className="flex flex-wrap items-center justify-between gap-4 text-xs text-slate-400 mb-5 pt-1">
+      <div className="flex flex-wrap items-center justify-between gap-4 text-xs text-slate-600 dark:text-slate-400 mb-5 pt-1">
         <div className="flex flex-wrap items-center gap-4">
           <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-sm bg-amber-800" />
+            <span className="w-3 h-3 rounded-sm bg-amber-500/80" />
             <span>Shelves</span>
           </div>
-
           <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-sm bg-green-700" />
+            <span className="w-3 h-3 rounded-sm bg-emerald-500" />
             <span>Pickup (P)</span>
           </div>
-
           <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-sm bg-blue-700" />
+            <span className="w-3 h-3 rounded-sm bg-blue-500" />
             <span>Delivery (D)</span>
           </div>
-
+          <div className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-full bg-cyan-500" />
+            <span>Moving</span>
+          </div>
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded-full bg-amber-400 animate-pulse" />
-            <span>Traffic Delay</span>
+            <span>Waiting</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-full bg-teal-500" />
+            <span>Overtaking</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-full bg-purple-500" />
+            <span>Rerouting</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-full bg-emerald-500" />
+            <span>Completed</span>
           </div>
         </div>
 
         <div className="flex items-center gap-3">
-          <span>Active Moving: <strong className="text-cyan-400">{activeCount}</strong></span>
-          {delayedCount > 0 && (
-            <span>Delayed: <strong className="text-amber-400">{delayedCount}</strong></span>
+          <span>Moving: <strong className="text-cyan-600 dark:text-cyan-400">{activeCount}</strong></span>
+          {overtakingCount > 0 && (
+            <span>Overtaking: <strong className="text-teal-600 dark:text-teal-400">{overtakingCount}</strong></span>
           )}
-          <span>Clock: <strong className="text-white">{time.toFixed(1)}s</strong> / {duration.toFixed(1)}s</span>
+          {reroutingCount > 0 && (
+            <span>Rerouting: <strong className="text-purple-600 dark:text-purple-400">{reroutingCount}</strong></span>
+          )}
+          {delayedCount > 0 && (
+            <span>Waiting: <strong className="text-amber-600 dark:text-amber-400">{delayedCount}</strong></span>
+          )}
+          <span>Clock: <strong className="text-slate-900 dark:text-white">{time.toFixed(1)}s</strong> / {duration.toFixed(1)}s</span>
         </div>
       </div>
 
@@ -460,38 +641,42 @@ export default function AnimatedWarehouse({
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div className="flex items-center gap-2">
           <button
+            type="button"
             onClick={togglePlayback}
             disabled={duration <= 0}
-            className="bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white rounded-lg px-4 py-2 flex items-center gap-2 font-medium transition-colors shadow-sm"
+            className="bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg px-4 py-2 flex items-center gap-2 font-medium transition-colors cursor-pointer shadow-sm"
           >
             {playing ? <Pause size={17} /> : <Play size={17} />}
             {playing ? "Pause" : "Play"}
           </button>
 
           <button
+            type="button"
             onClick={() => handleSkip(-5)}
             disabled={duration <= 0 || time <= 0}
-            className="bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-300 rounded-lg p-2 transition-colors"
+            className="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-lg p-2 transition-colors cursor-pointer"
             title="Rewind 5 seconds"
           >
             <Rewind size={17} />
           </button>
 
           <button
+            type="button"
             onClick={() => handleSkip(5)}
             disabled={duration <= 0 || time >= duration}
-            className="bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-300 rounded-lg p-2 transition-colors"
+            className="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-lg p-2 transition-colors cursor-pointer"
             title="Forward 5 seconds"
           >
             <FastForward size={17} />
           </button>
 
           <button
+            type="button"
             onClick={() => {
               setPlaying(false);
               setTime(0);
             }}
-            className="bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg px-3 py-2 flex items-center gap-1.5 transition-colors"
+            className="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 flex items-center gap-1.5 transition-colors cursor-pointer"
           >
             <RotateCcw size={16} />
             <span>Reset</span>
@@ -499,17 +684,18 @@ export default function AnimatedWarehouse({
         </div>
 
         {/* Playback Speed Select */}
-        <div className="flex items-center gap-2 text-xs text-slate-400">
+        <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400">
           <span>Speed:</span>
-          <div className="flex bg-slate-800 rounded-lg p-1 border border-slate-700">
+          <div className="flex bg-slate-100 dark:bg-slate-800 rounded-lg p-1 border border-slate-200 dark:border-slate-700">
             {[0.5, 1, 2, 5].map((s) => (
               <button
                 key={s}
+                type="button"
                 onClick={() => setSpeed(s)}
-                className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors ${
+                className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors cursor-pointer ${
                   speed === s
                     ? "bg-cyan-600 text-white"
-                    : "text-slate-400 hover:text-white"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
                 }`}
               >
                 {s}×
@@ -531,7 +717,7 @@ export default function AnimatedWarehouse({
             setPlaying(false);
             setTime(Number(e.target.value));
           }}
-          className="w-full accent-cyan-500 cursor-pointer h-2 bg-slate-800 rounded-lg appearance-none"
+          className="w-full accent-cyan-600 dark:accent-cyan-500 cursor-pointer h-2 bg-slate-200 dark:bg-slate-800 rounded-lg appearance-none"
         />
 
         <div className="flex justify-between text-xs text-slate-500 font-mono">

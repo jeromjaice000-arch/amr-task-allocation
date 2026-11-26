@@ -1,4 +1,3 @@
-
 from copy import deepcopy
 
 from routing import (
@@ -13,14 +12,17 @@ def distance(x1, y1, x2, y2):
     return abs(x1 - x2) + abs(y1 - y2)
 
 
-def nearest_available(robots, tasks):
+def nearest_available(robots, tasks, traffic_strategy="standard"):
     fleet = deepcopy(robots)
     assignments = []
+    unassignable_tasks = []
 
     scheduler = TrafficScheduler(
         time_step=0.1,
-        safety_distance=0.4
+        safety_distance=0.85
     )
+
+    max_fleet_capacity = max((r.capacity for r in fleet), default=0.0)
 
     for task in sorted(
         tasks,
@@ -32,9 +34,17 @@ def nearest_available(robots, tasks):
         ]
 
         if not eligible:
-            raise ValueError(
-                f"No robot can carry task {task.id}"
-            )
+            unassignable_tasks.append({
+                "task_id": task.id,
+                "weight": task.weight,
+                "max_fleet_capacity": max_fleet_capacity,
+                "arrival_time": task.arrival_time,
+                "reason": (
+                    f"Task weight ({task.weight} kg) exceeds maximum fleet capacity "
+                    f"({max_fleet_capacity} kg)."
+                ),
+            })
+            continue
 
         ready = [
             robot for robot in eligible
@@ -73,7 +83,9 @@ def nearest_available(robots, tasks):
             robot,
             task,
             requested_start,
-            scheduler
+            scheduler,
+            commit=True,
+            traffic_strategy=traffic_strategy
         )
 
         start = movement["start"]
@@ -93,6 +105,15 @@ def nearest_available(robots, tasks):
             "total_waiting_time": movement[
                 "total_waiting_time"
             ],
+            "distance": movement["distance"],
+            "decision": movement["decision"],
+            "decision_reason": movement["decision_reason"],
+            "conflicting_robots": movement["conflicting_robots"],
+            "estimated_wait_duration": movement["estimated_wait_duration"],
+            "estimated_time_saved": movement["estimated_time_saved"],
+            "rerouted": movement["rerouted"],
+            "overtaken": movement["overtaken"],
+            "overtake_windows": movement["overtake_windows"],
             "path": movement["path"]
         })
 
@@ -102,4 +123,4 @@ def nearest_available(robots, tasks):
         robot.x = task.delivery_x
         robot.y = task.delivery_y
 
-    return assignments, fleet
+    return assignments, fleet, unassignable_tasks

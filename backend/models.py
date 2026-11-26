@@ -1,5 +1,5 @@
-
-from pydantic import BaseModel, Field
+import math
+from pydantic import BaseModel, Field, field_validator
 
 
 class Robot(BaseModel):
@@ -12,6 +12,13 @@ class Robot(BaseModel):
     available_at: float = 0.0
     busy_time: float = 0.0
 
+    @field_validator("speed", "capacity")
+    @classmethod
+    def check_finite_positive(cls, v: float) -> float:
+        if not math.isfinite(v) or v <= 0:
+            raise ValueError("Value must be a finite positive number")
+        return v
+
 
 class Task(BaseModel):
     id: int
@@ -21,6 +28,13 @@ class Task(BaseModel):
     delivery_y: int
     weight: float = Field(gt=0)
     arrival_time: float = 0.0
+
+    @field_validator("weight")
+    @classmethod
+    def check_finite_weight(cls, v: float) -> float:
+        if not math.isfinite(v) or v <= 0:
+            raise ValueError("Task weight must be a finite positive number")
+        return v
 
 
 class SimulationRequest(BaseModel):

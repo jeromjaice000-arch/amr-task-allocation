@@ -1,4 +1,3 @@
-
 import { BarChart3, TrendingDown } from "lucide-react";
 
 const metrics = [
@@ -31,13 +30,13 @@ const metrics = [
 export default function AlgorithmComparison({ comparison }) {
   if (!comparison) {
     return (
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-        <h2 className="text-xl font-semibold flex items-center gap-2">
-          <BarChart3 className="text-cyan-400" />
+      <div className="glass-card rounded-xl p-6">
+        <h2 className="text-xl font-semibold flex items-center gap-2 text-slate-900 dark:text-slate-100">
+          <BarChart3 className="text-cyan-600 dark:text-cyan-400" />
           Algorithm Comparison
         </h2>
-        <p className="text-slate-400 mt-4">
-          Run a simulation to compare both allocation algorithms.
+        <p className="text-slate-500 dark:text-slate-400 mt-4 text-sm">
+          Run a simulation to compare both allocation algorithms under identical fleet &amp; traffic rules.
         </p>
       </div>
     );
@@ -45,27 +44,35 @@ export default function AlgorithmComparison({ comparison }) {
 
   const nearest = comparison.nearest.metrics;
   const optimized = comparison.optimized.metrics;
+  const strategyLabel =
+    comparison.nearest.traffic_strategy === "adaptive"
+      ? "ATAPP (Adaptive)"
+      : "Standard (Wait-Based)";
 
   const improvement = nearest.makespan > 0
-    ? ((nearest.makespan - optimized.makespan) /
-        nearest.makespan) * 100
+    ? ((nearest.makespan - optimized.makespan) / nearest.makespan) * 100
     : 0;
 
   return (
-    <section className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-      <h2 className="text-xl font-semibold flex items-center gap-2">
-        <BarChart3 className="text-cyan-400" />
-        Algorithm Comparison
-      </h2>
+    <section className="glass-card rounded-xl p-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-xl font-semibold flex items-center gap-2 text-slate-900 dark:text-slate-100">
+          <BarChart3 className="text-cyan-600 dark:text-cyan-400" />
+          Algorithm Comparison
+        </h2>
+        <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300">
+          Traffic Strategy: {strategyLabel}
+        </span>
+      </div>
 
-      <p className="text-slate-400 text-sm mt-2 mb-6">
-        Both policies evaluated using identical robots and tasks.
+      <p className="text-slate-500 dark:text-slate-400 text-sm mt-2 mb-6">
+        Both policies evaluated using identical customized robots, tasks, and traffic rules.
       </p>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {metrics.map((metric) => {
-          const baseline = nearest[metric.key];
-          const proposed = optimized[metric.key];
+          const baseline = nearest[metric.key] ?? 0;
+          const proposed = optimized[metric.key] ?? 0;
 
           const better = metric.lowerBetter
             ? proposed < baseline
@@ -76,27 +83,27 @@ export default function AlgorithmComparison({ comparison }) {
           return (
             <div
               key={metric.key}
-              className="bg-slate-800 rounded-xl p-4"
+              className="bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/60 rounded-xl p-4"
             >
-              <h3 className="text-sm text-slate-400 mb-4">
+              <h3 className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-4">
                 {metric.label}
               </h3>
 
               <div className="flex justify-between gap-3 mb-3">
                 <div>
-                  <p className="text-xs text-slate-400">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
                     Nearest
                   </p>
-                  <p className="font-bold text-lg">
+                  <p className="font-bold text-lg text-slate-900 dark:text-slate-100">
                     {baseline}{metric.unit}
                   </p>
                 </div>
 
                 <div className="text-right">
-                  <p className="text-xs text-slate-400">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
                     Workload Aware
                   </p>
-                  <p className="font-bold text-lg">
+                  <p className="font-bold text-lg text-slate-900 dark:text-slate-100">
                     {proposed}{metric.unit}
                   </p>
                 </div>
@@ -108,17 +115,14 @@ export default function AlgorithmComparison({ comparison }) {
                   { label: "Optimized", value: proposed, color: "bg-violet-500" }
                 ].map((item) => {
                   const maxValue = Math.max(baseline, proposed, 0.001);
-                  const width = Math.max(
-                    0,
-                    (item.value / maxValue) * 100
-                  );
+                  const width = Math.max(0, (item.value / maxValue) * 100);
 
                   return (
                     <div key={item.label}>
-                      <div className="flex justify-between text-xs text-slate-400 mb-1">
+                      <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 mb-1">
                         <span>{item.label}</span>
                       </div>
-                      <div className="h-3 bg-slate-700 rounded-full overflow-hidden">
+                      <div className="h-2.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
                         <div
                           className={`h-full rounded-full ${item.color}`}
                           style={{ width: `${width}%` }}
@@ -129,12 +133,12 @@ export default function AlgorithmComparison({ comparison }) {
                 })}
               </div>
 
-              <p className={`text-xs mt-4 ${
+              <p className={`text-xs mt-4 font-medium ${
                 equal
-                  ? "text-slate-400"
+                  ? "text-slate-500 dark:text-slate-400"
                   : better
-                    ? "text-emerald-400"
-                    : "text-amber-400"
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : "text-amber-600 dark:text-amber-400"
               }`}>
                 {equal
                   ? "Both algorithms performed equally"
@@ -147,26 +151,26 @@ export default function AlgorithmComparison({ comparison }) {
         })}
       </div>
 
-      <div className="border border-slate-700 rounded-xl p-5">
+      <div className="border border-slate-200 dark:border-slate-700 rounded-xl p-5 bg-slate-50 dark:bg-slate-800/40">
         <div className="flex items-center gap-2 mb-3">
-          <TrendingDown className="text-cyan-400" />
-          <h3 className="font-semibold">
+          <TrendingDown className="text-cyan-600 dark:text-cyan-400" />
+          <h3 className="font-semibold text-slate-900 dark:text-slate-100">
             Makespan Improvement
           </h3>
         </div>
 
         <p className={`text-3xl font-bold ${
           improvement > 0
-            ? "text-emerald-400"
+            ? "text-emerald-600 dark:text-emerald-400"
             : improvement < 0
-              ? "text-amber-400"
-              : "text-slate-300"
+              ? "text-amber-600 dark:text-amber-400"
+              : "text-slate-600 dark:text-slate-300"
         }`}>
           {improvement > 0 ? "+" : ""}
           {improvement.toFixed(2)}%
         </p>
 
-        <p className="text-sm text-slate-400 mt-2">
+        <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">
           {improvement > 0
             ? "Workload-aware allocation reduced total completion time."
             : improvement < 0

@@ -26,7 +26,7 @@ def position_at(path, time):
     return path[-1]["x"], path[-1]["y"]
 
 
-def detect_collisions(assignments, step=0.1, threshold=0.4):
+def detect_collisions(assignments, step=0.1, threshold=0.85):
     if step <= 0:
         raise ValueError("Step must be positive")
 

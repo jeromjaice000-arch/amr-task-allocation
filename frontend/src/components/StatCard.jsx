@@ -4,32 +4,27 @@ export default function StatCard({
   subtitle,
   icon: Icon,
   badge,
-  badgeColor = "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
+  badgeColor = "text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/25",
   gradient = "from-cyan-500 to-blue-600"
 }) {
   return (
-    <div className="relative overflow-hidden rounded-2xl glass-card p-5 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:border-slate-700/80 group">
-      {/* Ambient background light on hover */}
-      <div
-        className={`absolute -right-8 -top-8 w-24 h-24 rounded-full bg-gradient-to-br ${gradient} opacity-10 blur-2xl group-hover:opacity-25 transition-opacity duration-500 pointer-events-none`}
-      />
-
+    <div className="relative overflow-hidden rounded-xl glass-card p-5 transition-colors">
       <div className="flex items-center justify-between mb-3">
-        <p className="text-slate-400 text-xs font-medium tracking-wide uppercase">
+        <p className="text-slate-500 dark:text-slate-400 text-xs font-semibold tracking-wide uppercase">
           {title}
         </p>
 
         {Icon && (
           <div
-            className={`w-9 h-9 rounded-xl bg-gradient-to-br ${gradient} bg-opacity-10 flex items-center justify-center text-white shadow-sm p-2`}
+            className={`w-9 h-9 rounded-lg bg-gradient-to-br ${gradient} flex items-center justify-center text-white shadow-sm`}
           >
-            <Icon size={18} className="text-white drop-shadow" />
+            <Icon size={18} className="text-white" />
           </div>
         )}
       </div>
 
       <div className="flex items-baseline gap-2 mt-1">
-        <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+        <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
           {value}
         </h2>
 
@@ -43,9 +38,9 @@ export default function StatCard({
       </div>
 
       {subtitle && (
-        <p className="text-slate-400 text-xs mt-2.5 flex items-center gap-1.5 leading-relaxed">
-          <span className="w-1.5 h-1.5 rounded-full bg-slate-600 group-hover:bg-cyan-400 transition-colors" />
-          {subtitle}
+        <p className="text-slate-500 dark:text-slate-400 text-xs mt-2.5 flex items-center gap-1.5 leading-relaxed">
+          <span className="w-1.5 h-1.5 rounded-full bg-slate-400 dark:bg-slate-600 shrink-0" />
+          <span>{subtitle}</span>
         </p>
       )}
     </div>

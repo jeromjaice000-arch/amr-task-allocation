@@ -1,10 +1,14 @@
-
 const API_URL =
   import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
-export async function runSimulation(robots, tasks, algorithm) {
+export async function runSimulation(
+  robots,
+  tasks,
+  algorithm,
+  trafficStrategy = "standard"
+) {
   const response = await fetch(
-    `${API_URL}/api/simulate?algorithm=${encodeURIComponent(algorithm)}`,
+    `${API_URL}/api/simulate?algorithm=${encodeURIComponent(algorithm)}&traffic_strategy=${encodeURIComponent(trafficStrategy)}`,
     {
       method: "POST",
       headers: {

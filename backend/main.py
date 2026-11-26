@@ -41,10 +41,11 @@ def health_check():
 @app.post("/api/simulate")
 def simulate(
     request: SimulationRequest,
-    algorithm: str = "nearest"
+    algorithm: str = "nearest",
+    traffic_strategy: str = "standard"
 ):
     try:
-        return run_simulation(request, algorithm)
+        return run_simulation(request, algorithm, traffic_strategy)
     except ValueError as error:
         raise HTTPException(
             status_code=400,

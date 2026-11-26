@@ -1,4 +1,4 @@
-
+import math
 from pathfinding import astar
 from warehouse import WIDTH, HEIGHT, SHELVES
 
@@ -22,6 +22,15 @@ def find_route(start, goal):
 
 def route_distance(route):
     return len(route) - 1
+
+
+def path_distance(path):
+    if len(path) < 2:
+        return 0.0
+    return sum(
+        math.dist((a["x"], a["y"]), (b["x"], b["y"]))
+        for a, b in zip(path, path[1:])
+    )
 
 
 def build_timed_path(route, speed, start_time):
@@ -68,7 +77,6 @@ def build_task_path(robot, task, start_time):
         start_time + pickup_duration
     )
 
-    # Avoid duplicating the pickup waypoint.
     path = pickup_path + delivery_path[1:]
 
     return {
@@ -76,8 +84,14 @@ def build_task_path(robot, task, start_time):
         "duration": pickup_duration + delivery_duration
     }
 
+
 def build_traffic_aware_path(
-    robot, task, start_time, scheduler, commit=True
+    robot,
+    task,
+    start_time,
+    scheduler,
+    commit=True,
+    traffic_strategy="standard"
 ):
     pickup_route = find_route(
         (robot.x, robot.y),
@@ -91,27 +105,78 @@ def build_traffic_aware_path(
 
     combined_route = pickup_route + delivery_route[1:]
 
-    if commit:
-        path = scheduler.schedule_path(
+    if traffic_strategy == "adaptive":
+        adaptive_result = scheduler.find_adaptive_path(
             robot_id=robot.id,
-            route=combined_route,
+            start_pos=(robot.x, robot.y),
+            pickup_pos=(task.pickup_x, task.pickup_y),
+            delivery_pos=(task.delivery_x, task.delivery_y),
+            baseline_route=combined_route,
             start_time=start_time,
-            speed=robot.speed
+            speed=robot.speed,
         )
+        path = adaptive_result["path"]
+        if commit:
+            scheduler.add_scheduled_path(robot.id, path)
+
+        decision = adaptive_result["decision"]
+        decision_reason = adaptive_result["decision_reason"]
+        conflicting_robots = adaptive_result["conflicting_robots"]
+        estimated_wait_duration = adaptive_result["estimated_wait_duration"]
+        estimated_time_saved = adaptive_result["estimated_time_saved"]
+        rerouted = adaptive_result["rerouted"]
+        overtaken = adaptive_result.get("overtaken", False)
+        overtake_windows = adaptive_result.get("overtake_windows", [])
+    elif traffic_strategy == "standard":
+        ideal_path = scheduler._build_unscheduled_path(
+            combined_route, start_time, robot.speed
+        )
+        conflicting_robots = scheduler.find_conflicting_robots(
+            robot.id, ideal_path
+        )
+
+        if commit:
+            path = scheduler.schedule_path(
+                robot_id=robot.id,
+                route=combined_route,
+                start_time=start_time,
+                speed=robot.speed
+            )
+        else:
+            path = scheduler.find_conflict_free_path(
+                robot_id=robot.id,
+                route=combined_route,
+                start_time=start_time,
+                speed=robot.speed
+            )
+
+        wait_delay = round(
+            max(0.0, path[-1]["time"] - ideal_path[-1]["time"]), 3
+        )
+        if wait_delay > 0.05 and conflicting_robots:
+            conflict_label = ", ".join(
+                f"AMR-{rid:02d}" for rid in conflicting_robots
+            )
+            decision = "wait"
+            decision_reason = f"Waiting {wait_delay:.2f}s for {conflict_label}"
+        else:
+            decision = "direct"
+            decision_reason = "Clear shortest path"
+            conflicting_robots = []
+
+        estimated_wait_duration = wait_delay
+        estimated_time_saved = 0.0
+        rerouted = False
+        overtaken = False
+        overtake_windows = []
     else:
-        path = scheduler.find_conflict_free_path(
-            robot_id=robot.id,
-            route=combined_route,
-            start_time=start_time,
-            speed=robot.speed
-        )
+        raise ValueError("Unknown traffic strategy")
 
     actual_start = round(path[0]["time"], 3)
     actual_finish = round(path[-1]["time"], 3)
+    dist = round(path_distance(path), 3)
 
-    movement_duration = round(
-        route_distance(combined_route) / robot.speed, 3
-    )
+    movement_duration = round(dist / robot.speed, 3)
     scheduled_duration = round(actual_finish - actual_start, 3)
 
     waiting_time = round(max(0.0, actual_start - start_time), 3)
@@ -129,5 +194,14 @@ def build_traffic_aware_path(
         "duration": scheduled_duration,
         "waiting_time": waiting_time,
         "internal_waiting_time": internal_waiting_time,
-        "total_waiting_time": total_waiting_time
+        "total_waiting_time": total_waiting_time,
+        "distance": dist,
+        "decision": decision,
+        "decision_reason": decision_reason,
+        "conflicting_robots": conflicting_robots,
+        "estimated_wait_duration": estimated_wait_duration,
+        "estimated_time_saved": estimated_time_saved,
+        "rerouted": rerouted,
+        "overtaken": overtaken,
+        "overtake_windows": overtake_windows,
     }

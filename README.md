@@ -2,7 +2,7 @@
 
 An interactive simulation and decision-support platform for task allocation, obstacle-aware pathfinding, and dynamic traffic scheduling across a heterogeneous fleet of Autonomous Mobile Robots (AMRs) in warehouse environments.
 
-Developed as a college CA-1 evaluation project.
+Developed as a college project.
 
 ---
 
@@ -46,9 +46,10 @@ Developed as a college CA-1 evaluation project.
 
 ## Key Features
 
-1. **Heterogeneous AMR Fleet Modeling:**
-   - Supports robots with different speeds ($1.2 - 2.5\text{ m/s}$) and payload capacities ($25 - 80\text{ kg}$).
-   - Enforces strict capacity validation ($C_r \ge w_{\text{task}}$).
+1. **Customizable Heterogeneous AMR Fleet Modeling:**
+   - Supports robots with customizable movement speeds ($1.2 - 2.5\text{ m/s}$ default) and payload capacities ($25 - 80\text{ kg}$ default).
+   - Enforces strict frontend and backend validation (rejecting zero, negative, `NaN`, and `Infinity`) plus practicality warnings outside recommended operating ranges ($0.2 - 3.0\text{ m/s}$, $5 - 200\text{ kg}$).
+   - Gracefully marks tasks exceeding maximum fleet capacity as unassignable with clear explanations rather than failing.
 
 2. **$A^*$ Obstacle-Aware Routing:**
    - Navigates around warehouse shelves on a 12×8 grid.
@@ -58,33 +59,36 @@ Developed as a college CA-1 evaluation project.
    - **Nearest-Available (Baseline):** Greedy proximity heuristic.
    - **Workload-Aware Optimization (Proposed):** Evaluates traffic-delayed finish times and penalizes overworked robots ($\text{Score} = t_{\text{finish}} + 0.25 \cdot T_{\text{busy}}$).
 
-4. **Continuous Dynamic Traffic Scheduling:**
-   - Relative velocity vector collision detection eliminates moving conflicts in transit corridors.
-   - Automatically introduces route delays when corridors conflict.
-   - **0 moving collisions detected** across all verified scenarios.
+4. **Adaptive Traffic-Aware Path Planning (ATAPP):**
+   - Intelligent route adaptation that balances traffic delays, robot movement speeds, and alternative pathways to improve autonomous fleet coordination.
+   - Separates task allocation (`nearest` / `optimized`) from traffic management (`standard` wait-based vs. `adaptive` ATAPP).
+   - **Standard (Wait-Based):** Pauses robots along their fixed A* route until conflicting corridors clear (`safety_distance = 0.85` grid units).
+   - **Adaptive (ATAPP):** Uses reservation-aware **Space-Time A*** and **Intelligent Adjacent-Row Overtaking** (an adaptive traffic optimization mechanism that enables faster robots to bypass slower-moving robots through available neighbouring warehouse rows when doing so improves expected task completion time) with a configurable minimum time-saving threshold (`0.5s`). If waiting is faster, the robot yields; if overtaking or rerouting yields meaningful time savings, the robot adapts its route.
+   - **0 moving collisions detected** (`threshold = 0.85`) across all verified scenarios.
+   - *Limitation:* Dynamic traffic scheduling prevents moving and adjacent-cell conflicts during active transit, while stationary occupancy at the shared delivery station `(11, 3)` between completed tasks remains future scope (e.g., parking-bay routing).
 
-5. **Interactive React Visualization Dashboard:**
+5. **Interactive React Visualization Dashboard (Light & Dark Themes):**
+   - Enterprise Light and Dark themes persisted in `localStorage` without interrupting simulation state.
    - Smooth 60fps waypoint interpolation via `requestAnimationFrame`.
-   - Amber pulse halo indicator for traffic-delayed robots.
-   - Interactive robot route inspector highlighting planned trajectories.
-   - Gantt-style allocation timeline with individual task modals.
-   - Side-by-side comparative analytics for Makespan, Utilization Spread, and Throughput.
+   - Distinct state badges and color indicators: **MOVING** (blue/cyan), **WAITING** (amber), **OVERTAKING** (teal), **REROUTING** (purple), **IDLE** (muted grey), and **COMPLETED** (green).
+   - Interactive robot route inspector showing live coordinates, destination, conflicting robots, routing decision reason, estimated wait duration, and estimated time saved.
+   - Gantt-style allocation timeline, unassignable task reporting, ATAPP traffic analytics (overtake maneuvers, reroute decisions, wait decisions, estimated time saved, total distance), and side-by-side comparative analytics.
 
 ---
 
-## Verified Benchmark Results
+## Verified Benchmark Results (Standard vs. ATAPP)
 
-Evaluated across 5 deterministic benchmark scenarios (`backend/benchmark.py`):
+Evaluated across 5 deterministic benchmark scenarios (`backend/benchmark.py`) with `safety_distance = 0.85`:
 
-| Scenario | Tasks | Metric | Nearest-Available | Workload-Aware | Performance Delta |
-| :--- | :---: | :--- | :---: | :---: | :---: |
-| **Light Workload** | 10 | Makespan<br>Throughput<br>Traffic Delay | 77.53 s<br>464.32 /hr<br>76.50 s | **56.90 s**<br>**632.69 /hr**<br>**16.30 s** | **+26.61% faster**<br>+36.26% throughput<br>**-60.20 s delay** |
-| **Moderate Workload** | 20 | Makespan<br>Spread<br>Throughput | 143.90 s<br>39.47%<br>500.35 /hr | **128.60 s**<br>**21.90%**<br>**559.88 /hr** | **+10.63% faster**<br>**+17.57% better spread**<br>+11.90% throughput |
-| **Heavy Workload** | 40 | Makespan<br>Spread<br>Throughput | 276.43 s<br>41.87%<br>520.93 /hr | **258.20 s**<br>**21.88%**<br>**557.71 /hr** | **+6.60% faster**<br>**+19.99% better spread**<br>+7.06% throughput |
-| **High Heterogeneity** | 20 | Makespan<br>Spread<br>Traffic Delay | 216.57 s<br>78.34%<br>427.20 s | **144.42 s**<br>**52.04%**<br>**199.20 s** | **+33.31% faster**<br>**+26.30% better spread**<br>**-228.00 s delay** |
-| **Traffic Congestion** | 20 | Makespan<br>Spread<br>Throughput | 139.90 s<br>40.60%<br>514.66 /hr | **125.00 s**<br>**22.53%**<br>**576.00 /hr** | **+10.65% faster**<br>**+18.07% better spread**<br>+11.92% throughput |
+| Scenario | Tasks | Policy | Standard Makespan | ATAPP Makespan | ATAPP Impact | ATAPP Reroutes |
+| :--- | :---: | :--- | :---: | :---: | :---: | :---: |
+| **Light Workload** | 10 | Nearest-Available<br>Workload-Aware | 77.83 s<br>62.30 s | **67.70 s**<br>**50.87 s** | **+13.02% faster**<br>**+18.35% faster** | 4<br>6 |
+| **Moderate Workload** | 20 | Nearest-Available<br>Workload-Aware | 140.90 s<br>110.96 s | **106.27 s**<br>**91.10 s** | **+24.58% faster**<br>**+17.90% faster** | 9<br>15 |
+| **Heavy Workload** | 40 | Nearest-Available<br>Workload-Aware | 262.43 s<br>233.41 s | **196.93 s**<br>**173.87 s** | **+24.96% faster**<br>**+25.51% faster** | 24<br>35 |
+| **High Heterogeneity** | 20 | Nearest-Available<br>Workload-Aware | 197.00 s<br>136.72 s | **122.00 s**<br>**111.53 s** | **+38.07% faster**<br>**+18.43% faster** | 13<br>12 |
+| **Traffic Congestion** | 20 | Nearest-Available<br>Workload-Aware | 136.80 s<br>107.62 s | **91.93 s**<br>**85.50 s** | **+32.80% faster**<br>**+20.56% faster** | 13<br>14 |
 
-*Dynamic collision count: **0** across all 5 benchmark scenarios.*
+*Dynamic collision count (`threshold = 0.85`): **0** across all 5 benchmark scenarios for both Standard and ATAPP.*
 
 ---
 
