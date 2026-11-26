@@ -134,8 +134,6 @@ amr-task-allocation/
 │   │   └── App.jsx                     # Root React application
 │   └── package.json
 │
-├── PROJECT_REPORT.md               # Complete academic technical report (20 sections)
-├── PRESENTATION_AND_VIVA.md        # 12-slide presentation plan & Top 10 viva Q&A
 ├── .gitignore                      # Git ignore file
 └── README.md                       # Main documentation
 ```
