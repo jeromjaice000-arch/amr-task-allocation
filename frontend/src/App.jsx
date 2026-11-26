@@ -116,7 +116,7 @@ export default function App() {
           <div className="flex items-center gap-3 mb-3">
             <span className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-cyan-400 bg-cyan-500/10 border border-cyan-500/25 px-3 py-1 rounded-full">
               <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
-              CA-1 Evaluation Project
+              AUTONOMOUS FLEET INTELLIGENCE
             </span>
             <span className="text-xs text-slate-500 hidden sm:block">
               Autonomous Mobile Robots · Fleet Dispatch &amp; Traffic Scheduling
