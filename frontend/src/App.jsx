@@ -523,8 +523,17 @@ export default function App() {
         )}
 
         {/* ── FOOTER ───────────────────────────────────────────────── */}
-        <footer className="mt-10 pb-6 text-center text-xs text-slate-500 dark:text-slate-600">
-          AMR Control · Autonomous Fleet Intelligence · FastAPI, React &amp; Tailwind CSS
+        <footer className="mt-12 pt-6 pb-4 border-t border-slate-200 dark:border-slate-800/80 text-center flex flex-col items-center justify-center gap-1.5">
+          <div className="inline-flex items-center gap-2 text-sm font-medium text-slate-900 dark:text-slate-100">
+            <Bot size={18} className="text-cyan-600 dark:text-cyan-400" />
+            <span>AMR Control</span>
+          </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Engineered for intelligent autonomy.
+          </p>
+          <p className="text-[11px] text-slate-400 dark:text-slate-500">
+            © 2026
+          </p>
         </footer>
       </main>
     </div>
